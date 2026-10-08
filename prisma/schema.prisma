@@ -1,0 +1,172 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("POSTGRES_PRISMA_URL")
+  directUrl = env("POSTGRES_URL_NON_POOLING")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum RoomOperationalStatus {
+  VACANT
+  OCCUPIED
+  OUT_OF_ORDER
+}
+
+enum ReservationStatus {
+  PENDING_DP
+  WAITING_DP_VERIFICATION
+  CONFIRMED
+  CANCELLED
+  CHECKED_IN
+  CHECKED_OUT
+}
+
+enum PaymentType {
+  DP
+  SETTLEMENT
+}
+
+enum PaymentStatus {
+  UNPAID
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum PaymentMethod {
+  CASH
+  TRANSFER
+  QRIS
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  phone        String?
+  role         UserRole @default(USER)
+
+  reservations     Reservation[]
+  verifiedPayments Payment[]     @relation("VerifiedBy")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model RoomType {
+  id          String  @id @default(cuid())
+  name        String  @unique
+  description String  @db.Text
+  capacity    Int
+  basePrice   Int
+  image       String?
+
+  rooms     Room[]
+  amenities RoomTypeAmenity[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Room {
+  id         String                @id @default(cuid())
+  roomNumber String                @unique
+  floor      String?
+  status     RoomOperationalStatus @default(VACANT)
+
+  roomTypeId String
+  roomType   RoomType @relation(fields: [roomTypeId], references: [id])
+
+  reservations Reservation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Amenity {
+  id   String @id @default(cuid())
+  name String @unique
+
+  roomTypes RoomTypeAmenity[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model RoomTypeAmenity {
+  roomTypeId String
+  amenityId  String
+
+  roomType RoomType @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+  amenity  Amenity  @relation(fields: [amenityId], references: [id], onDelete: Cascade)
+
+  @@id([roomTypeId, amenityId])
+}
+
+model Reservation {
+  id          String            @id @default(cuid())
+  bookingCode String            @unique
+  checkIn     DateTime
+  checkOut    DateTime
+  guestCount  Int               @default(1)
+  totalPrice  Int
+  dpAmount    Int
+  status      ReservationStatus @default(PENDING_DP)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  roomId String
+  room   Room   @relation(fields: [roomId], references: [id])
+
+  payments Payment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([roomId, checkIn, checkOut])
+  @@index([userId])
+}
+
+model Payment {
+  id     String      @id @default(cuid())
+  type   PaymentType
+  amount Int
+
+  method     PaymentMethod?
+  proofImage String?
+  status     PaymentStatus  @default(UNPAID)
+
+  reservationId String
+  reservation   Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+
+  verifiedById String?
+  verifiedBy   User?   @relation("VerifiedBy", fields: [verifiedById], references: [id], onDelete: SetNull)
+
+  paidAt     DateTime?
+  verifiedAt DateTime?
+  notes      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([reservationId, type])
+}
+
+model SystemSetting {
+  key         String  @id
+  value       String
+  description String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
