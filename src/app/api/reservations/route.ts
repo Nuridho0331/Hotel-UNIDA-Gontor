@@ -209,7 +209,7 @@ export async function POST(request: Request) {
     // Lock per tipe kamar selama pemeriksaan dan pembuatan reservasi.
     // Mencegah dua request memilih unit yang sama secara bersamaan pada PostgreSQL.
     const reservation = await prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${roomTypeId}))`;
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${roomTypeId}))::text AS locked`;
 
       const availableRoom = await tx.room.findFirst({
         where: {
