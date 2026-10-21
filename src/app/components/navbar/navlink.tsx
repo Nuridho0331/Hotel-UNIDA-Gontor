@@ -67,17 +67,17 @@ const navlink = () => {
           </Link>
         </li>
           
-          {session.user.role === 'admin' && (
+          {session.user.role === 'ADMIN' && (
           <>
           <li>
-          <Link href='/admin/dashboard' className='block py-2 px-3 text-gray-700
+          <Link href='/admin' className='block py-2 px-3 text-gray-700
           rounded hover:bg-transparent md:p-0'>
             Dashboard
           </Link>
         </li>
 
          <li>
-          <Link href='/admin/manage-rooms' className='block py-2 px-3 text-gray-700
+          <Link href='/admin/rooms' className='block py-2 px-3 text-gray-700
           rounded hover:bg-transparent md:p-0'>
            Manage-room
           </Link>
