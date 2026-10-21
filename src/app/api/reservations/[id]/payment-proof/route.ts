@@ -8,7 +8,7 @@ const MAX_BODY_BYTES = 1050 * 1024;
 
 function validImage(dataUrl: unknown): dataUrl is string {
   if (typeof dataUrl !== "string") return false;
-  const match = /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/]+={0,2})$/.exec(dataUrl);
+  const match = /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+\\/]+={0,2})$/.exec(dataUrl);
   if (!match) return false;
   const encoded = match[2];
   if (encoded.length > Math.ceil(MAX_PROOF_BYTES / 3) * 4 + 4) return false;
