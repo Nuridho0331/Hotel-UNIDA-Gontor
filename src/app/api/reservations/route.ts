@@ -89,6 +89,11 @@ export async function POST(request: Request) {
       );
     }
 
+    const pattern = /^\\d{4}-\\d{2}-\\d{2}$/;
+    if (!pattern.test(checkIn) || !pattern.test(checkOut)) {
+      return NextResponse.json({ message: "Format tanggal harus YYYY-MM-DD." }, { status: 400 });
+    }
+
     const checkInDate = new Date(
       `${checkIn}T00:00:00.000Z`
     );
@@ -109,6 +114,18 @@ export async function POST(request: Request) {
           status: 400,
         }
       );
+    }
+
+    if (checkInDate.toISOString().slice(0, 10) !== checkIn ||
+        checkOutDate.toISOString().slice(0, 10) !== checkOut) {
+      return NextResponse.json({ message: "Tanggal reservasi tidak valid." }, { status: 400 });
+    }
+    const today = new Date();
+    const localToday = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Jakarta", year: "numeric", month: "2-digit", day: "2-digit",
+    }).format(today);
+    if (checkIn < localToday) {
+      return NextResponse.json({ message: "Tanggal check-in tidak boleh di masa lalu." }, { status: 400 });
     }
 
     if (checkOutDate <= checkInDate) {
@@ -189,65 +206,33 @@ export async function POST(request: Request) {
       );
     }
 
-    const availableRoom =
-      await prisma.room.findFirst({
+    // Lock per tipe kamar selama pemeriksaan dan pembuatan reservasi.
+    // Mencegah dua request memilih unit yang sama secara bersamaan pada PostgreSQL.
+    const reservation = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${roomTypeId}))`;
+
+      const availableRoom = await tx.room.findFirst({
         where: {
           roomTypeId,
-
           status: "VACANT",
-
           reservations: {
             none: {
-              status: {
-                in: [
-                  ...BLOCKING_STATUSES,
-                ],
-              },
-
-              checkIn: {
-                lt: checkOutDate,
-              },
-
-              checkOut: {
-                gt: checkInDate,
-              },
+              status: { in: [...BLOCKING_STATUSES] },
+              checkIn: { lt: checkOutDate },
+              checkOut: { gt: checkInDate },
             },
           },
         },
-
-        orderBy: {
-          roomNumber: "asc",
-        },
+        orderBy: { roomNumber: "asc" },
       });
+      if (!availableRoom) return null;
 
-    if (!availableRoom) {
-      return NextResponse.json(
-        {
-          message:
-            "Kamar sudah tidak tersedia untuk tanggal tersebut.",
-        },
-        {
-          status: 409,
-        }
-      );
-    }
+      let bookingCode = generateBookingCode();
+      while (await tx.reservation.findUnique({ where: { bookingCode } })) {
+        bookingCode = generateBookingCode();
+      }
 
-    let bookingCode =
-      generateBookingCode();
-
-    while (
-      await prisma.reservation.findUnique({
-        where: {
-          bookingCode,
-        },
-      })
-    ) {
-      bookingCode =
-        generateBookingCode();
-    }
-
-    const reservation =
-      await prisma.reservation.create({
+      return tx.reservation.create({
         data: {
           bookingCode,
           checkIn: checkInDate,
@@ -255,31 +240,23 @@ export async function POST(request: Request) {
           guestCount,
           totalPrice,
           dpAmount,
-
           status: "PENDING_DP",
-
           userId: session.user.id,
           roomId: availableRoom.id,
-
           payments: {
-            create: {
-              type: "DP",
-              amount: dpAmount,
-              status: "UNPAID",
-            },
+            create: { type: "DP", amount: dpAmount, status: "UNPAID" },
           },
         },
-
-        include: {
-          room: {
-            include: {
-              roomType: true,
-            },
-          },
-
-          payments: true,
-        },
+        include: { room: { include: { roomType: true } }, payments: true },
       });
+    });
+
+    if (!reservation) {
+      return NextResponse.json(
+        { message: "Kamar sudah tidak tersedia untuk tanggal tersebut." },
+        { status: 409 }
+      );
+    }
 
     return NextResponse.json(
       {
@@ -339,5 +316,34 @@ export async function POST(request: Request) {
         status: 500,
       }
     );
+  }
+}
+export async function GET() {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ message: "Silakan login terlebih dahulu." }, { status: 401 });
+    }
+
+    const reservations = await prisma.reservation.findMany({
+      where: { userId: session.user.id },
+      select: {
+        id: true,
+        bookingCode: true,
+        checkIn: true,
+        checkOut: true,
+        totalPrice: true,
+        status: true,
+        room: { select: { roomNumber: true, roomType: { select: { name: true } } } },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    return NextResponse.json(
+      { reservations },
+      { headers: { "Cache-Control": "private, no-store" } }
+    );
+  } catch (error) {
+    console.error("LIST USER RESERVATIONS ERROR:", error);
+    return NextResponse.json({ message: "Gagal mengambil riwayat reservasi." }, { status: 500 });
   }
 }
