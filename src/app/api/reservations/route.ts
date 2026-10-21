@@ -89,7 +89,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const pattern = /^\\d{4}-\\d{2}-\\d{2}$/;
+    const pattern = /^\d{4}-\d{2}-\d{2}$/;
     if (!pattern.test(checkIn) || !pattern.test(checkOut)) {
       return NextResponse.json({ message: "Format tanggal harus YYYY-MM-DD." }, { status: 400 });
     }
@@ -209,7 +209,7 @@ export async function POST(request: Request) {
     // Lock per tipe kamar selama pemeriksaan dan pembuatan reservasi.
     // Mencegah dua request memilih unit yang sama secara bersamaan pada PostgreSQL.
     const reservation = await prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${roomTypeId}))`;
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${roomTypeId}))`;
 
       const availableRoom = await tx.room.findFirst({
         where: {
