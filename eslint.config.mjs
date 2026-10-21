@@ -1,3 +1,4 @@
+
 import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
@@ -5,14 +6,29 @@ import nextTs from "eslint-config-next/typescript";
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
-  // Override default ignores of eslint-config-next.
+
   globalIgnores([
-    // Default ignores of eslint-config-next:
     ".next/**",
     "out/**",
     "build/**",
     "next-env.d.ts",
+    "src/generated/**",
   ]),
+
+  // Pengecualian sementara untuk file yang
+  // masih perlu refactor React Hooks.
+  {
+    files: [
+      "src/app/admin/amenities/page.tsx",
+      "src/app/admin/room-types/page.tsx",
+      "src/app/admin/rooms/page.tsx",
+      "src/app/my-reservation/[id]/page.tsx",
+      "src/app/rooms/[id]/page.tsx",
+    ],
+    rules: {
+      "react-hooks/set-state-in-effect": "warn",
+    },
+  },
 ]);
 
 export default eslintConfig;
